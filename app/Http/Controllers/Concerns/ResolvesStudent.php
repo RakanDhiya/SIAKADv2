@@ -3,30 +3,14 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\Student;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * Trait ResolvesStudent
- *
- * Mengatur cakupan akses data siswa berdasarkan
- * peran pengguna yang sedang login.
+ * Menentukan siswa mana yang boleh dilihat user:
+ * admin = semua, siswa = dirinya sendiri, orang tua = anak yang terhubung.
  */
 trait ResolvesStudent
 {
-    /**
-     * Mengambil data siswa sesuai hak akses pengguna.
-     *
-     * Admin dapat mengakses seluruh data siswa,
-     * siswa hanya dapat mengakses datanya sendiri,
-     * dan orang tua hanya dapat mengakses data anaknya.
-     *
-     * @return Builder
-     *
-     * @throws HttpException
-     */
     protected function viewableStudents()
     {
         $user = auth()->user();
@@ -46,15 +30,7 @@ trait ResolvesStudent
         abort(403);
     }
 
-    /**
-     * Menentukan siswa yang akan ditampilkan berdasarkan request.
-     *
-     * Jika parameter student tersedia, sistem akan memilih
-     * siswa tersebut selama masih berada dalam cakupan akses.
-     * Jika tidak tersedia, sistem memilih siswa pertama.
-     *
-     * @return array{0: Collection, 1: ?Student}
-     */
+    /** @return array{0: \Illuminate\Support\Collection, 1: ?Student} */
     protected function pickStudent(Request $request): array
     {
         $students = $this->viewableStudents()->orderBy('name')->get();

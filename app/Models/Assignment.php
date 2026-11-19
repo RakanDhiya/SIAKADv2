@@ -1,6 +1,8 @@
 <?php
 
-namespace Illuminate\Database\Eloquent\Model;
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Mengelola tugas pembelajaran dan pengumpulan tugas siswa

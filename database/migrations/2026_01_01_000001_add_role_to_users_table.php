@@ -11,9 +11,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table){
+        Schema::table('users', function (Blueprint $table) {
             $table->string('role', 20)->default('siswa');
-            $table-boolean('is_active')->default(true);
+            $table->boolean('is_active')->default(true);
         });
     }
 

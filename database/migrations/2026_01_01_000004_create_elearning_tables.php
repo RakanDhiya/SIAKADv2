@@ -45,7 +45,7 @@ return new class extends Migration
             $table->unique(['assignment_id', 'student_id']);
         });
 
-        Schemaa::create('announcements', function (Blueprint $table) {
+        Schema::create('announcements', function (Blueprint $table) {
             $table->id();
             $table->string('title', 150);
             $table->text('body');
