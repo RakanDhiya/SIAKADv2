@@ -1,4 +1,5 @@
 @props(['title' => 'SIAKAD', 'breadcrumbs' => []])
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -8,45 +9,105 @@
     <title>{{ $title }} · SIAKAD</title>
     <x-layouts.head />
 </head>
+
 <body class="bg-paper font-sans text-board-900 antialiased print:bg-white">
-<div class="min-h-screen lg:flex">
-    <x-layouts.sidebar />
+    <div class="min-h-screen lg:flex">
 
-    <div class="flex min-w-0 flex-1 flex-col">
-        <x-layouts.navbar />
+        {{-- Sidebar navigasi --}}
+        <x-layouts.sidebar />
 
-        <main class="flex-1 p-4 lg:p-8">
-            <nav aria-label="Breadcrumb" class="mb-3 text-sm text-board-600 print:hidden">
-                <ol class="flex flex-wrap items-center gap-1.5">
-                    <li><a href="{{ route('dashboard') }}" class="hover:underline">Beranda</a></li>
-                    @foreach ($breadcrumbs as $label => $url)
-                        <li aria-hidden="true">/</li>
-                        <li>
-                            @if ($url)
-                                <a href="{{ $url }}" class="hover:underline">{{ $label }}</a>
-                            @else
-                                <span class="text-board-900">{{ $label }}</span>
-                            @endif
-                        </li>
-                    @endforeach
-                </ol>
-            </nav>
+        <div class="flex min-w-0 flex-1 flex-col">
 
-            <h1 class="mb-5 font-display text-2xl font-semibold text-board-900">{{ $title }}</h1>
+            {{-- Navbar utama --}}
+            <x-layouts.navbar />
 
-            @if (session('success'))
-                <x-ui.alert type="success" class="mb-4 print:hidden">{{ session('success') }}</x-ui.alert>
-            @endif
-            @if (session('error'))
-                <x-ui.alert type="error" class="mb-4 print:hidden">{{ session('error') }}</x-ui.alert>
-            @endif
-            @if ($errors->any())
-                <x-ui.alert type="error" class="mb-4 print:hidden">Data belum bisa disimpan. Periksa isian yang ditandai merah.</x-ui.alert>
-            @endif
+            {{-- Konten halaman --}}
+            <main id="main-content" class="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
 
-            {{ $slot }}
-        </main>
+                <div class="mx-auto w-full max-w-[1600px]">
+
+                    {{-- Breadcrumb --}}
+                    <nav
+                        aria-label="Breadcrumb"
+                        class="mb-4 text-xs font-medium text-board-400 print:hidden"
+                    >
+                        <ol class="flex flex-wrap items-center gap-2">
+                            <li>
+                                <a
+                                    href="{{ route('dashboard') }}"
+                                    class="transition-colors hover:text-board-700"
+                                >
+                                    Beranda
+                                </a>
+                            </li>
+
+                            @foreach ($breadcrumbs as $label => $url)
+                                <li aria-hidden="true" class="text-board-300">
+                                    /
+                                </li>
+
+                                <li>
+                                    @if ($url)
+                                        <a
+                                            href="{{ $url }}"
+                                            class="transition-colors hover:text-board-700"
+                                        >
+                                            {{ $label }}
+                                        </a>
+                                    @else
+                                        <span
+                                            class="font-semibold text-board-800"
+                                            aria-current="page"
+                                        >
+                                            {{ $label }}
+                                        </span>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ol>
+                    </nav>
+
+                    {{-- Judul halaman --}}
+                    <h1 class="mb-6 font-display text-2xl font-semibold tracking-tight text-board-900 sm:text-3xl">
+                        {{ $title }}
+                    </h1>
+
+                    {{-- Notifikasi berhasil --}}
+                    @if (session('success'))
+                        <x-ui.alert
+                            type="success"
+                            class="mb-5 print:hidden"
+                        >
+                            {{ session('success') }}
+                        </x-ui.alert>
+                    @endif
+
+                    {{-- Notifikasi kesalahan --}}
+                    @if (session('error'))
+                        <x-ui.alert
+                            type="error"
+                            class="mb-5 print:hidden"
+                        >
+                            {{ session('error') }}
+                        </x-ui.alert>
+                    @endif
+
+                    {{-- Ringkasan kesalahan validasi --}}
+                    @if ($errors->any())
+                        <x-ui.alert
+                            type="error"
+                            class="mb-5 print:hidden"
+                        >
+                            Data belum bisa disimpan. Periksa isian yang ditandai merah.
+                        </x-ui.alert>
+                    @endif
+
+                    {{-- Konten utama setiap halaman --}}
+                    {{ $slot }}
+
+                </div>
+            </main>
+        </div>
     </div>
-</div>
 </body>
 </html>

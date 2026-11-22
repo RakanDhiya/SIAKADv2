@@ -1,116 +1,358 @@
 <x-layouts.app :title="'Selamat datang, '.auth()->user()->name" :breadcrumbs="[]">
+
+    @php
+        $monthNames = [
+            1 => 'Januari', 2 => 'Februari', 3 => 'Maret',
+            4 => 'April', 5 => 'Mei', 6 => 'Juni',
+            7 => 'Juli', 8 => 'Agustus', 9 => 'September',
+            10 => 'Oktober', 11 => 'November', 12 => 'Desember',
+        ];
+
+        $calendarStart = now()->startOfMonth();
+        $calendarDays = $calendarStart->daysInMonth;
+        $calendarOffset = $calendarStart->dayOfWeekIso - 1;
+        $calendarToday = now()->day;
+        $calendarMonthLabel = $monthNames[now()->month].' '.now()->year;
+    @endphp
+
     {{-- Ringkasan data sekolah --}}
-    <div class="grid grid-cols-2 divide-x divide-board-100 rounded-md border border-board-100 bg-white lg:grid-cols-4">
+    <section class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         @foreach ($counts as $label => $total)
-            <div class="px-5 py-4">
-                <div class="font-display text-4xl font-semibold text-board-800">{{ $total }}</div>
-                <div class="text-sm text-board-600">{{ $label }}</div>
+            <div class="rounded-xl border border-board-200 bg-white p-5 shadow-sm">
+                <p class="text-sm font-medium text-board-500">{{ $label }}</p>
+                <p class="mt-2 font-display text-3xl font-semibold text-board-800">
+                    {{ number_format($total, 0, ',', '.') }}
+                </p>
+                <div class="mt-3 h-1 w-12 rounded-full bg-pencil-400"></div>
             </div>
         @endforeach
+    </section>
+
+    {{-- Informasi tahun ajaran dan semester --}}
+    <div class="mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-board-200 bg-white px-5 py-4 shadow-sm">
+        <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-board-500">Tahun Ajaran Aktif</p>
+            <p class="mt-1 text-sm font-semibold text-board-800">
+                {{ $year->name ?? 'Belum diatur' }}
+            </p>
+        </div>
+
+        <div class="hidden h-9 w-px bg-board-200 sm:block"></div>
+
+        <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-board-500">Semester Aktif</p>
+            <p class="mt-1 text-sm font-semibold text-board-800">
+                {{ $semester->label ?? 'Belum diatur' }}
+            </p>
+        </div>
     </div>
 
-    <p class="mt-3 text-sm text-board-600">
-        Tahun ajaran aktif: <span class="font-medium text-board-900">{{ $year->name ?? 'belum diatur' }}</span>
-        · Semester aktif: <span class="font-medium text-board-900">{{ $semester->label ?? 'belum diatur' }}</span>
-    </p>
-
+    {{-- Pemilihan siswa untuk siswa dan orang tua --}}
     @if (auth()->user()->hasRole('siswa', 'ortu'))
-        @include('modules.me.partials.student-picker', ['students' => $students, 'student' => $student, 'action' => route('dashboard')])
+        <div class="mb-6">
+            @include('modules.me.partials.student-picker', [
+                'students' => $students,
+                'student' => $student,
+                'action' => route('dashboard')
+            ])
+        </div>
     @endif
 
-    <div class="mt-6 grid gap-6 lg:grid-cols-2">
-        {{-- Panel khusus admin --}}
-        @if (auth()->user()->hasRole('admin'))
-            <x-ui.card title="Siswa aktif per kelas" :flush="true">
-                <table class="min-w-full text-sm">
-                    <tbody class="divide-y divide-board-100">
-                        @forelse ($classSummary as $c)
-                            <tr>
-                                <td class="px-5 py-2.5">{{ $c->name }}</td>
-                                <td class="px-5 py-2.5 text-right font-medium">{{ $c->students_count }}</td>
-                            </tr>
-                        @empty
-                            <tr><td class="px-5 py-6 text-board-600">Belum ada kelas pada tahun ajaran aktif.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </x-ui.card>
+    {{-- Kalender dan Today Schedule --}}
+    <section class="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-5">
 
-            <x-ui.card title="Absensi hari ini">
+        {{-- Kalender bulanan --}}
+        <div class="rounded-xl border border-board-200 bg-white p-5 shadow-sm xl:col-span-2">
+
+            <div class="mb-5 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-board-500">
+                        Academic Calendar
+                    </p>
+                    <h2 class="mt-1 font-display text-xl font-semibold text-board-900">
+                        {{ $calendarMonthLabel }}
+                    </h2>
+                </div>
+
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-board-100 text-board-700">
+                    <span class="text-lg">▦</span>
+                </div>
+            </div>
+
+            {{-- Hari dalam seminggu --}}
+            <div class="grid grid-cols-7 gap-1 text-center">
+                @foreach (['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'] as $dayName)
+                    <div class="py-2 text-xs font-semibold text-board-500">
+                        {{ $dayName }}
+                    </div>
+                @endforeach
+
+                {{-- Ruang kosong sebelum tanggal pertama --}}
+                @for ($blank = 0; $blank < $calendarOffset; $blank++)
+                    <div class="aspect-square"></div>
+                @endfor
+
+                {{-- Tanggal dalam bulan --}}
+                @for ($day = 1; $day <= $calendarDays; $day++)
+                    @php
+                        $isToday = $day === $calendarToday;
+                        $isSunday = $calendarStart->copy()->addDays($day - 1)->dayOfWeekIso === 7;
+                    @endphp
+
+                    <div class="flex aspect-square items-center justify-center">
+                        <span @class([
+                            'flex h-9 w-9 items-center justify-center rounded-xl text-sm transition-colors',
+                            'bg-board-700 font-bold text-white shadow-sm' => $isToday,
+                            'text-board-400' => $isSunday && !$isToday,
+                            'font-medium text-board-700 hover:bg-board-50' => !$isSunday && !$isToday,
+                        ])>
+                            {{ $day }}
+                        </span>
+                    </div>
+                @endfor
+            </div>
+
+            <div class="mt-5 flex items-center gap-2 border-t border-board-200 pt-4">
+                <span class="h-3 w-3 rounded-full bg-board-700"></span>
+                <span class="text-xs text-board-500">Hari ini</span>
+                <span class="ml-auto text-xs font-medium text-board-600">
+                    {{ now()->translatedFormat('l, d F Y') }}
+                </span>
+            </div>
+        </div>
+
+        {{-- Today Schedule --}}
+        <div class="overflow-hidden rounded-xl border border-board-200 bg-white shadow-sm xl:col-span-3">
+
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-board-200 px-5 py-5">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-board-500">
+                        Daily Overview
+                    </p>
+                    <h2 class="mt-1 font-display text-xl font-semibold text-board-900">
+                        Today Schedule
+                    </h2>
+                    <p class="mt-1 text-xs text-board-500">
+                        {{ \App\Models\Schedule::DAYS[$today] ?? 'Minggu' }},
+                        {{ now()->format('d/m/Y') }}
+                    </p>
+                </div>
+
+                <span class="rounded-lg bg-board-100 px-3 py-2 text-xs font-semibold text-board-700">
+                    {{ $todaySchedule->count() }} Jadwal
+                </span>
+            </div>
+
+            @if ($todaySchedule->isEmpty())
+                <div class="flex min-h-64 flex-col items-center justify-center px-5 py-10 text-center">
+                    <div class="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-board-50 text-2xl">
+                        <span>▦</span>
+                    </div>
+                    <p class="font-semibold text-board-800">Belum ada jadwal hari ini</p>
+                    <p class="mt-1 max-w-xs text-sm text-board-500">
+                        Jadwal pelajaran untuk hari ini belum tersedia.
+                    </p>
+                </div>
+            @else
+                <div class="divide-y divide-board-100">
+                    @foreach ($todaySchedule as $s)
+                        <div class="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-board-50 sm:flex-row sm:items-center">
+
+                            {{-- Waktu pelajaran --}}
+                            <div class="shrink-0 sm:w-28">
+                                <p class="text-sm font-bold text-board-800">
+                                    {{ $s->time_range }}
+                                </p>
+                                <p class="mt-1 text-xs text-board-400">
+                                    Jam pelajaran
+                                </p>
+                            </div>
+
+                            {{-- Informasi mata pelajaran --}}
+                            <div class="min-w-0 flex-1 border-l-2 border-board-200 pl-4">
+                                <p class="truncate font-semibold text-board-800">
+                                    {{ $s->teachingAssignment->subject->name ?? 'Mata pelajaran' }}
+                                </p>
+
+                                @if (auth()->user()->hasRole('admin'))
+                                    <p class="mt-1 text-xs text-board-500">
+                                        Kelas:
+                                        {{ $s->teachingAssignment->classroom->name ?? '-' }}
+                                    </p>
+                                    <p class="mt-1 text-xs text-board-500">
+                                        Guru:
+                                        {{ $s->teachingAssignment->teacher->name ?? '-' }}
+                                    </p>
+                                @elseif (auth()->user()->hasRole('guru'))
+                                    <p class="mt-1 text-xs text-board-500">
+                                        Kelas:
+                                        {{ $s->teachingAssignment->classroom->name ?? '-' }}
+                                    </p>
+                                @else
+                                    <p class="mt-1 text-xs text-board-500">
+                                        Guru:
+                                        {{ $s->teachingAssignment->teacher->name ?? '-' }}
+                                    </p>
+                                @endif
+                            </div>
+
+                            <div class="hidden shrink-0 sm:block">
+                                <span class="rounded-lg bg-board-50 px-3 py-2 text-xs font-medium text-board-600">
+                                    {{ $s->day_name }}
+                                </span>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </section>
+
+    {{-- Informasi tambahan berdasarkan role --}}
+    <section class="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+        {{-- Ringkasan siswa per kelas khusus Admin --}}
+        @if (auth()->user()->hasRole('admin'))
+            <div class="overflow-hidden rounded-xl border border-board-200 bg-white shadow-sm">
+                <div class="border-b border-board-200 px-5 py-4">
+                    <h2 class="font-semibold text-board-800">Siswa Aktif per Kelas</h2>
+                    <p class="mt-1 text-xs text-board-500">Distribusi siswa pada tahun ajaran aktif</p>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-board-50 text-left text-xs font-semibold uppercase tracking-wide text-board-500">
+                            <tr>
+                                <th class="px-5 py-3">Nama Kelas</th>
+                                <th class="px-5 py-3 text-right">Jumlah Siswa</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-board-100">
+                            @forelse ($classSummary as $c)
+                                <tr class="hover:bg-board-50">
+                                    <td class="px-5 py-3 font-medium text-board-700">{{ $c->name }}</td>
+                                    <td class="px-5 py-3 text-right font-semibold text-board-800">
+                                        {{ $c->students_count }}
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="2" class="px-5 py-8 text-center text-board-500">
+                                        Belum ada kelas pada tahun ajaran aktif.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {{-- Ringkasan absensi hari ini --}}
+            <div class="rounded-xl border border-board-200 bg-white p-5 shadow-sm">
+                <div class="mb-5">
+                    <h2 class="font-semibold text-board-800">Absensi Hari Ini</h2>
+                    <p class="mt-1 text-xs text-board-500">Rekap kehadiran siswa hari ini</p>
+                </div>
+
                 @if ($attendanceToday->isEmpty())
-                    <p class="text-sm text-board-600">Belum ada absensi yang dicatat hari ini.</p>
+                    <div class="rounded-lg border border-dashed border-board-200 bg-board-50 px-4 py-8 text-center">
+                        <p class="text-sm text-board-500">
+                            Belum ada absensi yang dicatat hari ini.
+                        </p>
+                    </div>
                 @else
-                    <dl class="grid grid-cols-4 gap-3 text-center">
+                    <dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         @foreach (\App\Models\Attendance::STATUSES as $key => $label)
-                            <div>
-                                <dt class="text-xs text-board-600">{{ $label }}</dt>
-                                <dd class="font-display text-2xl font-semibold">{{ $attendanceToday[$key] ?? 0 }}</dd>
+                            <div class="rounded-xl border border-board-200 bg-board-50 p-4 text-center">
+                                <dt class="text-xs font-medium text-board-500">{{ $label }}</dt>
+                                <dd class="mt-2 font-display text-2xl font-semibold text-board-800">
+                                    {{ $attendanceToday[$key] ?? 0 }}
+                                </dd>
                             </div>
                         @endforeach
                     </dl>
                 @endif
-            </x-ui.card>
+            </div>
         @endif
 
-        {{-- Guru: ringkasan tambahan --}}
+        {{-- Ringkasan tambahan Guru --}}
         @foreach ($extra as $label => $total)
-            <x-ui.card>
-                <div class="font-display text-3xl font-semibold text-board-800">{{ $total }}</div>
-                <div class="text-sm text-board-600">{{ $label }}</div>
-            </x-ui.card>
+            <div class="rounded-xl border border-board-200 bg-white p-5 shadow-sm">
+                <p class="text-sm font-medium text-board-500">{{ $label }}</p>
+                <p class="mt-2 font-display text-3xl font-semibold text-board-800">
+                    {{ number_format($total, 0, ',', '.') }}
+                </p>
+            </div>
         @endforeach
 
-        {{-- Jadwal hari ini (guru, siswa, orang tua) --}}
-        @unless (auth()->user()->hasRole('admin'))
-            <x-ui.card :title="'Jadwal hari ini ('.(\App\Models\Schedule::DAYS[$today] ?? 'Minggu').')'" :flush="true">
-                @if ($todaySchedule->isEmpty())
-                    <p class="p-5 text-sm text-board-600">Tidak ada jadwal hari ini.</p>
-                @else
-                    <ul class="divide-y divide-board-100 text-sm">
-                        @foreach ($todaySchedule as $s)
-                            <li class="flex items-center justify-between gap-3 px-5 py-2.5">
-                                <span>
-                                    <span class="font-medium">{{ $s->teachingAssignment->subject->name }}</span>
-                                    <span class="text-board-600">
-                                        — {{ auth()->user()->hasRole('guru') ? $s->teachingAssignment->classroom->name : $s->teachingAssignment->teacher->name }}
-                                    </span>
-                                </span>
-                                <span class="whitespace-nowrap text-board-600">{{ $s->time_range }}</span>
-                            </li>
-                        @endforeach
-                    </ul>
-                @endif
-            </x-ui.card>
-        @endunless
-
+        {{-- Tugas yang belum dikumpulkan --}}
         @if (isset($pendingTasks))
-            <x-ui.card title="Tugas yang belum dikumpulkan" :flush="true">
+            <div class="overflow-hidden rounded-xl border border-board-200 bg-white shadow-sm">
+                <div class="border-b border-board-200 px-5 py-4">
+                    <h2 class="font-semibold text-board-800">Tugas yang Belum Dikumpulkan</h2>
+                    <p class="mt-1 text-xs text-board-500">Daftar tugas yang masih menunggu pengumpulan</p>
+                </div>
+
                 @if ($pendingTasks->isEmpty())
-                    <p class="p-5 text-sm text-board-600">Tidak ada tugas yang menunggu.</p>
+                    <p class="px-5 py-8 text-center text-sm text-board-500">
+                        Tidak ada tugas yang menunggu.
+                    </p>
                 @else
-                    <ul class="divide-y divide-board-100 text-sm">
+                    <ul class="divide-y divide-board-100">
                         @foreach ($pendingTasks as $t)
-                            <li class="flex items-center justify-between gap-3 px-5 py-2.5">
-                                <a class="font-medium text-board-700 hover:underline"
-                                   href="{{ route('me.assignments.show', [$t->id, 'student' => $student?->id]) }}">{{ $t->title }}</a>
-                                <span class="whitespace-nowrap text-board-600">{{ $t->teachingAssignment->subject->name }} · {{ $t->due_at?->format('d/m H:i') ?? 'tanpa tenggat' }}</span>
+                            <li class="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="min-w-0">
+                                    <a
+                                        class="font-medium text-board-700 hover:text-board-900 hover:underline"
+                                        href="{{ route('me.assignments.show', [$t->id, 'student' => $student?->id]) }}"
+                                    >
+                                        {{ $t->title }}
+                                    </a>
+                                    <p class="mt-1 text-xs text-board-500">
+                                        {{ $t->teachingAssignment->subject->name }}
+                                    </p>
+                                </div>
+
+                                <span class="shrink-0 text-xs text-board-500">
+                                    {{ $t->due_at?->format('d/m H:i') ?? 'Tanpa tenggat' }}
+                                </span>
                             </li>
                         @endforeach
                     </ul>
                 @endif
-            </x-ui.card>
+            </div>
         @endif
 
-        <x-ui.card title="Pengumuman terbaru" :flush="true" class="lg:col-span-2">
-            @forelse ($announcements as $a)
-                <article class="border-b border-board-100 px-5 py-3 last:border-0">
-                    <h3 class="font-medium">{{ $a->title }}</h3>
-                    <p class="text-xs text-board-600">{{ $a->published_at?->format('d/m/Y H:i') }}</p>
-                    <p class="mt-1 text-sm">{{ \Illuminate\Support\Str::limit($a->body, 160) }}</p>
-                </article>
-            @empty
-                <p class="p-5 text-sm text-board-600">Belum ada pengumuman.</p>
-            @endforelse
-        </x-ui.card>
-    </div>
+    </section>
+
+    {{-- Pengumuman terbaru --}}
+    <section class="overflow-hidden rounded-xl border border-board-200 bg-white shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-board-200 px-5 py-4">
+            <div>
+                <h2 class="font-semibold text-board-800">Pengumuman Terbaru</h2>
+                <p class="mt-1 text-xs text-board-500">Informasi terbaru dari sekolah</p>
+            </div>
+
+            <span class="rounded-lg bg-board-50 px-3 py-2 text-xs font-medium text-board-600">
+                {{ $announcements->count() }} Pengumuman
+            </span>
+        </div>
+
+        @forelse ($announcements as $a)
+            <article class="border-b border-board-100 px-5 py-4 last:border-0 hover:bg-board-50">
+                <h3 class="font-semibold text-board-800">{{ $a->title }}</h3>
+                <p class="mt-1 text-xs text-board-500">
+                    {{ $a->published_at?->format('d/m/Y H:i') }}
+                </p>
+                <p class="mt-2 text-sm leading-relaxed text-board-600">
+                    {{ \Illuminate\Support\Str::limit($a->body, 160) }}
+                </p>
+            </article>
+        @empty
+            <p class="px-5 py-8 text-center text-sm text-board-500">
+                Belum ada pengumuman.
+            </p>
+        @endforelse
+    </section>
+
 </x-layouts.app>

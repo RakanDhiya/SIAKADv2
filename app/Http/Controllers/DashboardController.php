@@ -40,45 +40,85 @@ class DashboardController extends Controller
             'extra'         => [],
         ];
 
+        // Dashboard khusus Admin.
         if ($user->hasRole('admin')) {
             $data['classSummary'] = Classroom::whereHas('academicYear', fn ($q) => $q->where('is_active', true))
                 ->withCount(['enrollments as students_count' => fn ($q) => $q->where('status', 'aktif')])
                 ->orderBy('name')->get();
 
             $data['attendanceToday'] = Attendance::whereDate('date', today())
-                ->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
+                ->selectRaw('status, count(*) as total')
+                ->groupBy('status')
+                ->pluck('total', 'status');
+
+            // Mengambil seluruh jadwal pelajaran pada hari ini.
+            if ($semester) {
+                $data['todaySchedule'] = Schedule::with([
+                    'teachingAssignment.subject',
+                    'teachingAssignment.classroom',
+                    'teachingAssignment.teacher',
+                ])
+                    ->where('day', $data['today'])
+                    ->whereHas('teachingAssignment', fn ($q) => $q->where('semester_id', $semester->id))
+                    ->orderBy('start_time')
+                    ->get();
+            }
         }
 
+        // Dashboard khusus Guru.
         if ($user->hasRole('guru') && $user->teacher && $semester) {
             $teacherId = $user->teacher->id;
 
-            $data['todaySchedule'] = Schedule::with(['teachingAssignment.subject', 'teachingAssignment.classroom'])
+            $data['todaySchedule'] = Schedule::with([
+                'teachingAssignment.subject',
+                'teachingAssignment.classroom',
+            ])
                 ->where('day', $data['today'])
-                ->whereHas('teachingAssignment', fn ($q) => $q->where('teacher_id', $teacherId)->where('semester_id', $semester->id))
-                ->orderBy('start_time')->get();
+                ->whereHas('teachingAssignment', fn ($q) => $q
+                    ->where('teacher_id', $teacherId)
+                    ->where('semester_id', $semester->id))
+                ->orderBy('start_time')
+                ->get();
 
             $data['extra']['Tugas menunggu dinilai'] = Submission::whereNull('graded_at')
-                ->whereHas('assignment.teachingAssignment', fn ($q) => $q->where('teacher_id', $teacherId))->count();
+                ->whereHas('assignment.teachingAssignment', fn ($q) => $q->where('teacher_id', $teacherId))
+                ->count();
         }
 
+        // Dashboard khusus Siswa dan Orang Tua.
         if ($user->hasRole('siswa', 'ortu')) {
             [$students, $student] = $this->pickStudent($request);
+
             $classroomId = $student?->activeEnrollment?->classroom_id;
+
             $data['students'] = $students;
             $data['student'] = $student;
             $data['classroom'] = $student?->activeEnrollment?->classroom;
 
             if ($classroomId && $semester) {
-                $data['todaySchedule'] = Schedule::with(['teachingAssignment.subject', 'teachingAssignment.teacher'])
+                $data['todaySchedule'] = Schedule::with([
+                    'teachingAssignment.subject',
+                    'teachingAssignment.teacher',
+                ])
                     ->where('day', $data['today'])
-                    ->whereHas('teachingAssignment', fn ($q) => $q->where('classroom_id', $classroomId)->where('semester_id', $semester->id))
-                    ->orderBy('start_time')->get();
+                    ->whereHas('teachingAssignment', fn ($q) => $q
+                        ->where('classroom_id', $classroomId)
+                        ->where('semester_id', $semester->id))
+                    ->orderBy('start_time')
+                    ->get();
 
                 $data['pendingTasks'] = Assignment::with('teachingAssignment.subject')
-                    ->whereHas('teachingAssignment', fn ($q) => $q->where('classroom_id', $classroomId)->where('semester_id', $semester->id))
-                    ->whereDoesntHave('submissions', fn ($q) => $q->where('student_id', $student->id))
-                    ->where(fn ($q) => $q->whereNull('due_at')->orWhere('due_at', '>=', now()))
-                    ->orderBy('due_at')->limit(5)->get();
+                    ->whereHas('teachingAssignment', fn ($q) => $q
+                        ->where('classroom_id', $classroomId)
+                        ->where('semester_id', $semester->id))
+                    ->whereDoesntHave('submissions', fn ($q) => $q
+                        ->where('student_id', $student->id))
+                    ->where(fn ($q) => $q
+                        ->whereNull('due_at')
+                        ->orWhere('due_at', '>=', now()))
+                    ->orderBy('due_at')
+                    ->limit(5)
+                    ->get();
             }
         }
 

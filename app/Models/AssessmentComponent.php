@@ -12,6 +12,6 @@ class AssessmentComponent extends Model
 {
     protected $guarded = [];
 
-    public function teachingssignment() { return $this->belongsTo(TeachingAssignment::class); }
+    public function teachingAssignment() { return $this->belongsTo(TeachingAssignment::class); }
     public function scores()            { return $this->hasMany(Score::class); }
 }

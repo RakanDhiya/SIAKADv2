@@ -3,13 +3,13 @@
         <div class="hidden flex-col justify-between bg-board-800 p-12 text-board-100 lg:flex">
             <div class="flex items-center gap-2.5">
                 <span class="inline-block h-6 w-6 rounded-sm bg-pencil-400" aria-hidden="true"></span>
-                <span class="font-display text-xl font-semibold text-white">SIAKAD</span>
+                <span class="font-display text-xl font-semibold text-white">SMKN 5 TANGERANG SELATAN</span>
             </div>
             <div>
                 <p class="font-display text-4xl font-semibold leading-tight text-white">Sistem informasi akademik sekolah</p>
                 <p class="mt-4 max-w-md text-board-200">Jadwal, absensi, nilai, rapor, dan e-learning dalam satu tempat untuk admin, guru, siswa, dan orang tua.</p>
             </div>
-            <p class="text-sm text-board-300">Akun dibuat oleh admin sekolah.</p>
+            <p class="text-sm text-board-300">Akun dibuat oleh Admin.</p>
         </div>
 
         <div class="flex items-center justify-center p-6">
