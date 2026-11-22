@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AcademicCalendarController;
 use App\Http\Controllers\AcademicYearController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AssessmentComponentController;
@@ -41,6 +42,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
+    // Kalender Akademik: dapat dilihat semua pengguna login.
+    Route::get('/kalender-akademik', [AcademicCalendarController::class, 'index'])
+        ->name('academic-calendar.index');
+
     Route::get('/akun/password', [AuthController::class, 'editPassword'])->name('account.password.edit');
     Route::put('/akun/password', [AuthController::class, 'updatePassword'])->name('account.password.update');
 
@@ -65,13 +70,23 @@ Route::middleware('auth')->group(function () {
         Route::resource('teaching-assignments', TeachingAssignmentController::class)->except('show');
         Route::resource('announcements', AnnouncementController::class)->except('show');
 
-        // Jadwal: tulis hanya admin (daftar bisa dilihat guru, lihat di bawah)
+        // Jadwal: tulis hanya admin (daftar bisa dilihat guru, lihat di bawah).
         Route::resource('schedules', ScheduleController::class)->except(['index', 'show']);
 
         Route::get('promotion', [PromotionController::class, 'index'])->name('promotion.index');
         Route::post('promotion', [PromotionController::class, 'store'])->name('promotion.store');
 
         Route::get('reports/teachers', [ReportController::class, 'teachers'])->name('reports.teachers');
+
+        // Pengelolaan Kalender Akademik: hanya admin.
+        Route::post('academic-calendar', [AcademicCalendarController::class, 'store'])
+            ->name('academic-calendar.store');
+
+        Route::put('academic-calendar/{academicEvent}', [AcademicCalendarController::class, 'update'])
+            ->name('academic-calendar.update');
+
+        Route::delete('academic-calendar/{academicEvent}', [AcademicCalendarController::class, 'destroy'])
+            ->name('academic-calendar.destroy');
     });
 
     // ---------- Admin dan Guru ----------
@@ -106,11 +121,11 @@ Route::middleware('auth')->group(function () {
         Route::get('tugas/{assignment}', [MeController::class, 'assignment'])->name('me.assignments.show');
     });
 
-    // Mengumpulkan tugas: hanya siswa
+    // Mengumpulkan tugas: hanya siswa.
     Route::post('saya/tugas/{assignment}', [MeController::class, 'submit'])
         ->middleware(EnsureRole::class.':siswa')->name('me.assignments.submit');
 
-    // Rapor: admin, siswa (miliknya), orang tua (anaknya)
+    // Rapor: admin, siswa (miliknya), orang tua (anaknya).
     Route::get('rapor', [ReportCardController::class, 'show'])
         ->middleware(EnsureRole::class.':admin,siswa,ortu')->name('report-card');
 });

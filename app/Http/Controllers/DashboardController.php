@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ResolvesStudent;
+use App\Models\AcademicEvent;
 use App\Models\AcademicYear;
 use App\Models\Announcement;
 use App\Models\Assignment;
@@ -24,6 +25,7 @@ class DashboardController extends Controller
     {
         $user = $request->user();
         $semester = Semester::active();
+        $academicYear = AcademicYear::active();
 
         $data = [
             'counts' => [
@@ -32,19 +34,54 @@ class DashboardController extends Controller
                 'Kelas'          => Classroom::whereHas('academicYear', fn ($q) => $q->where('is_active', true))->count(),
                 'Mata pelajaran' => Subject::count(),
             ],
-            'year'          => AcademicYear::active(),
-            'semester'      => $semester,
-            'announcements' => Announcement::visibleTo($user)->latest('published_at')->limit(5)->get(),
-            'today'         => now()->dayOfWeekIso,
+
+            'year' => $academicYear,
+            'semester' => $semester,
+
+            'announcements' => Announcement::visibleTo($user)
+                ->latest('published_at')
+                ->limit(5)
+                ->get(),
+
+            // Lima agenda akademik terdekat pada tahun ajaran aktif.
+            'upcomingEvents' => AcademicEvent::with('academicYear')
+                ->when(
+                    $academicYear,
+                    fn ($q) => $q->where('academic_year_id', $academicYear->id),
+                    fn ($q) => $q->whereRaw('1 = 0')
+                )
+                ->whereDate('end_date', '>=', today())
+                ->orderBy('start_date')
+                ->limit(5)
+                ->get(),
+
+            // Seluruh agenda yang berlangsung pada bulan berjalan.
+            'calendarEvents' => AcademicEvent::when(
+                    $academicYear,
+                    fn ($q) => $q->where('academic_year_id', $academicYear->id),
+                    fn ($q) => $q->whereRaw('1 = 0')
+                )
+                ->whereDate('start_date', '<=', now()->endOfMonth())
+                ->whereDate('end_date', '>=', now()->startOfMonth())
+                ->orderBy('start_date')
+                ->get(),
+
+            'today' => now()->dayOfWeekIso,
             'todaySchedule' => collect(),
-            'extra'         => [],
+            'extra' => [],
         ];
 
         // Dashboard khusus Admin.
         if ($user->hasRole('admin')) {
-            $data['classSummary'] = Classroom::whereHas('academicYear', fn ($q) => $q->where('is_active', true))
-                ->withCount(['enrollments as students_count' => fn ($q) => $q->where('status', 'aktif')])
-                ->orderBy('name')->get();
+            $data['classSummary'] = Classroom::whereHas(
+                'academicYear',
+                fn ($q) => $q->where('is_active', true)
+            )
+                ->withCount([
+                    'enrollments as students_count' => fn ($q) => $q->where('status', 'aktif'),
+                ])
+                ->orderBy('name')
+                ->get();
 
             $data['attendanceToday'] = Attendance::whereDate('date', today())
                 ->selectRaw('status, count(*) as total')
@@ -59,7 +96,10 @@ class DashboardController extends Controller
                     'teachingAssignment.teacher',
                 ])
                     ->where('day', $data['today'])
-                    ->whereHas('teachingAssignment', fn ($q) => $q->where('semester_id', $semester->id))
+                    ->whereHas(
+                        'teachingAssignment',
+                        fn ($q) => $q->where('semester_id', $semester->id)
+                    )
                     ->orderBy('start_time')
                     ->get();
             }
@@ -81,7 +121,10 @@ class DashboardController extends Controller
                 ->get();
 
             $data['extra']['Tugas menunggu dinilai'] = Submission::whereNull('graded_at')
-                ->whereHas('assignment.teachingAssignment', fn ($q) => $q->where('teacher_id', $teacherId))
+                ->whereHas(
+                    'assignment.teachingAssignment',
+                    fn ($q) => $q->where('teacher_id', $teacherId)
+                )
                 ->count();
         }
 

@@ -13,6 +13,15 @@
         $calendarOffset = $calendarStart->dayOfWeekIso - 1;
         $calendarToday = now()->day;
         $calendarMonthLabel = $monthNames[now()->month].' '.now()->year;
+
+        $eventCategoryColors = [
+            'Akademik' => 'bg-blue-50 text-blue-700 border-blue-200',
+            'Ujian' => 'bg-rose-50 text-rose-700 border-rose-200',
+            'Libur' => 'bg-amber-50 text-amber-700 border-amber-200',
+            'Kegiatan Sekolah' => 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            'Pembagian Rapor' => 'bg-violet-50 text-violet-700 border-violet-200',
+            'Lainnya' => 'bg-board-50 text-board-700 border-board-200',
+        ];
     @endphp
 
     {{-- Ringkasan data sekolah --}}
@@ -95,29 +104,62 @@
                 {{-- Tanggal dalam bulan --}}
                 @for ($day = 1; $day <= $calendarDays; $day++)
                     @php
+                        $date = $calendarStart->copy()->addDays($day - 1);
+
                         $isToday = $day === $calendarToday;
-                        $isSunday = $calendarStart->copy()->addDays($day - 1)->dayOfWeekIso === 7;
+                        $isSunday = $date->dayOfWeekIso === 7;
+
+                        $hasEvent = $calendarEvents->contains(
+                            fn ($event) =>
+                                $event->start_date->toDateString() <= $date->toDateString()
+                                && $event->end_date->toDateString() >= $date->toDateString()
+                        );
                     @endphp
 
-                    <div class="flex aspect-square items-center justify-center">
-                        <span @class([
-                            'flex h-9 w-9 items-center justify-center rounded-xl text-sm transition-colors',
-                            'bg-board-700 font-bold text-white shadow-sm' => $isToday,
-                            'text-board-400' => $isSunday && !$isToday,
-                            'font-medium text-board-700 hover:bg-board-50' => !$isSunday && !$isToday,
-                        ])>
+                    <div class="flex aspect-square flex-col items-center justify-center gap-0.5">
+                        <span
+                            @class([
+                                'flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition',
+                                'bg-board-700 text-white shadow-sm' => $isToday,
+                                'text-rose-600' => $isSunday && !$isToday,
+                                'text-board-700 hover:bg-board-100' => !$isToday && !$isSunday,
+                            ])
+                        >
                             {{ $day }}
                         </span>
+
+                        @if ($hasEvent)
+                            <span
+                                @class([
+                                    'h-1 w-1 rounded-full',
+                                    'bg-pencil-300' => $isToday,
+                                    'bg-pencil-500' => !$isToday,
+                                ])
+                            ></span>
+                        @else
+                            <span class="h-1 w-1"></span>
+                        @endif
                     </div>
                 @endfor
             </div>
 
-            <div class="mt-5 flex items-center gap-2 border-t border-board-200 pt-4">
-                <span class="h-3 w-3 rounded-full bg-board-700"></span>
-                <span class="text-xs text-board-500">Hari ini</span>
-                <span class="ml-auto text-xs font-medium text-board-600">
+            {{-- Keterangan kalender --}}
+            <div class="mt-5 space-y-3 border-t border-board-200 pt-4">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div class="flex items-center gap-2">
+                        <span class="h-3 w-3 rounded-full bg-board-700"></span>
+                        <span class="text-xs text-board-500">Hari ini</span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <span class="h-2 w-2 rounded-full bg-pencil-500"></span>
+                        <span class="text-xs text-board-500">Ada agenda akademik</span>
+                    </div>
+                </div>
+
+                <p class="text-xs font-medium text-board-600">
                     {{ now()->translatedFormat('l, d F Y') }}
-                </span>
+                </p>
             </div>
         </div>
 
@@ -206,6 +248,122 @@
                 </div>
             @endif
         </div>
+    </section>
+
+    {{-- Agenda akademik terdekat --}}
+    <section class="mb-6 overflow-hidden rounded-xl border border-board-200 bg-white shadow-sm">
+
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-board-200 px-5 py-5">
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-board-500">
+                    School Activities
+                </p>
+                <h2 class="mt-1 font-display text-xl font-semibold text-board-900">
+                    Agenda Akademik Terdekat
+                </h2>
+                <p class="mt-1 text-xs text-board-500">
+                    Agenda dan kegiatan sekolah pada tahun ajaran aktif.
+                </p>
+            </div>
+
+            <a
+                href="{{ route('academic-calendar.index') }}"
+                class="inline-flex items-center gap-2 rounded-lg border border-board-200 bg-board-50 px-4 py-2.5 text-xs font-semibold text-board-700 transition hover:bg-board-100"
+            >
+                Lihat Kalender
+                <span aria-hidden="true">→</span>
+            </a>
+        </div>
+
+        @if ($upcomingEvents->isEmpty())
+            <div class="flex flex-col items-center justify-center px-5 py-10 text-center">
+                <div class="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-board-50 text-2xl text-board-500">
+                    <span>▦</span>
+                </div>
+
+                <p class="font-semibold text-board-800">
+                    Belum ada agenda akademik
+                </p>
+
+                <p class="mt-1 max-w-sm text-sm text-board-500">
+                    Agenda sekolah yang akan datang akan ditampilkan di bagian ini.
+                </p>
+            </div>
+        @else
+            <div class="divide-y divide-board-100">
+                @foreach ($upcomingEvents as $event)
+                    <article class="flex flex-col gap-4 px-5 py-5 transition-colors hover:bg-board-50 sm:flex-row sm:items-start">
+
+                        {{-- Tanggal agenda --}}
+                        <div class="flex shrink-0 items-center gap-3 sm:w-36 sm:flex-col sm:items-start sm:gap-1 sm:rounded-xl sm:border sm:border-board-200 sm:bg-board-50 sm:px-4 sm:py-3">
+                            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-board-700 font-display text-lg font-semibold text-white sm:h-auto sm:w-full sm:rounded-none sm:bg-transparent sm:text-2xl sm:text-board-800">
+                                {{ $event->start_date->format('d') }}
+                            </div>
+
+                            <div>
+                                <p class="text-sm font-semibold text-board-800">
+                                    {{ $event->start_date->translatedFormat('F Y') }}
+                                </p>
+
+                                <p class="mt-0.5 text-xs text-board-500">
+                                    @if ($event->start_date->isSameDay($event->end_date))
+                                        {{ $event->start_date->translatedFormat('l') }}
+                                    @else
+                                        {{ $event->start_date->format('d/m/Y') }}
+                                        – {{ $event->end_date->format('d/m/Y') }}
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+
+                        {{-- Informasi agenda --}}
+                        <div class="min-w-0 flex-1">
+                            <div class="mb-2 flex flex-wrap items-center gap-2">
+                                <span @class([
+                                    'inline-flex rounded-md border px-2.5 py-1 text-[11px] font-semibold',
+                                    $eventCategoryColors[$event->category] ?? $eventCategoryColors['Lainnya'],
+                                ])>
+                                    {{ $event->category }}
+                                </span>
+
+                                @if ($event->start_date->isPast() && $event->end_date->isFuture())
+                                    <span class="rounded-md bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                                        Sedang berlangsung
+                                    </span>
+                                @endif
+                            </div>
+
+                            <h3 class="font-semibold text-board-800">
+                                {{ $event->title }}
+                            </h3>
+
+                            <p class="mt-1 text-xs text-board-500">
+                                Tahun Ajaran:
+                                {{ $event->academicYear->name ?? '-' }}
+
+                                @if ($event->semester)
+                                    <span class="mx-1">·</span>
+                                    Semester {{ $event->semester->name }}
+                                @endif
+                            </p>
+
+                            @if ($event->location)
+                                <p class="mt-2 flex items-center gap-2 text-xs text-board-500">
+                                    <span aria-hidden="true">⌖</span>
+                                    {{ $event->location }}
+                                </p>
+                            @endif
+
+                            @if ($event->description)
+                                <p class="mt-2 text-sm leading-relaxed text-board-600">
+                                    {{ \Illuminate\Support\Str::limit($event->description, 180) }}
+                                </p>
+                            @endif
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+        @endif
     </section>
 
     {{-- Informasi tambahan berdasarkan role --}}
