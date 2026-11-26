@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 
@@ -293,39 +294,46 @@ abstract class CrudController extends Controller
 
     protected function persist(Model $model, Request $request, array $data): void
     {
-        foreach ($this->fields() as $f) {
-            $name = $f['name'];
-            $type = $f['type'] ?? 'text';
+        DB::transaction(function () use ($model, $request, $data) {
+            foreach ($this->fields() as $f) {
+                $name = $f['name'];
+                $type = $f['type'] ?? 'text';
 
-            if ($type === 'file') {
-                if ($request->hasFile($name)) {
-                    if ($model->{$name}) {
-                        Storage::disk('public')->delete($model->{$name});
+                if ($type === 'file') {
+                    if ($request->hasFile($name)) {
+                        if ($model->{$name}) {
+                            Storage::disk('public')->delete($model->{$name});
+                        }
+
+                        $data[$name] = $request->file($name)
+                            ->store($this->routeName, 'public');
+                    } else {
+                        unset($data[$name]);
                     }
-                    $data[$name] = $request->file($name)->store($this->routeName, 'public');
-                } else {
+                } elseif ($type === 'password') {
+                    if (empty($data[$name])) {
+                        unset($data[$name]);
+                    }
+                } elseif ($type === 'checkbox') {
+                    $data[$name] = $request->boolean($name);
+                } elseif ($type === 'multiselect') {
                     unset($data[$name]);
                 }
-            } elseif ($type === 'password') {
-                if (empty($data[$name])) {
-                    unset($data[$name]);
+            }
+
+            $data = $this->beforeSave($data, $model, $request);
+
+            $model->forceFill($data)->save();
+
+            foreach ($this->fields() as $f) {
+                if (($f['type'] ?? '') === 'multiselect') {
+                    $model->{$f['relation']}()->sync(
+                        $request->input($f['name'], [])
+                    );
                 }
-            } elseif ($type === 'checkbox') {
-                $data[$name] = $request->boolean($name);
-            } elseif ($type === 'multiselect') {
-                unset($data[$name]);
             }
-        }
 
-        $data = $this->beforeSave($data, $model, $request);
-        $model->forceFill($data)->save();
-
-        foreach ($this->fields() as $f) {
-            if (($f['type'] ?? '') === 'multiselect') {
-                $model->{$f['relation']}()->sync($request->input($f['name'], []));
-            }
-        }
-
-        $this->afterSave($model, $request);
+            $this->afterSave($model, $request);
+        });
     }
 }

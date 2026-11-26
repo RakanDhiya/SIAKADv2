@@ -11,27 +11,27 @@
     --font-display: "Newsreader", Georgia, serif;
 
     /* Background */
-    --color-paper: #F7F8F7;
+    --color-paper: #F5F6F7;
 
-    /* Primary: Sage Green */
-    --color-board-50: #F3F7F4;
-    --color-board-100: #E7EFE9;
-    --color-board-200: #D0DED4;
-    --color-board-300: #ADC3B4;
-    --color-board-400: #87A792;
-    --color-board-500: #648B72;
-    --color-board-600: #496F58;
-    --color-board-700: #365743;
-    --color-board-800: #254333;
-    --color-board-900: #172F24;
+    /* Primary: Reference Deep Green */
+    --color-board-50: #F2F6F4;
+    --color-board-100: #E5EEE9;
+    --color-board-200: #CCDCD3;
+    --color-board-300: #AFC5B8;
+    --color-board-400: #82A48F;
+    --color-board-500: #4F8067;
+    --color-board-600: #28664A;
+    --color-board-700: #034C34;
+    --color-board-800: #023E2B;
+    --color-board-900: #012F20;
 
-    /* Accent: Warm Gold */
-    --color-pencil-300: #F8E4B2;
-    --color-pencil-400: #F0C66A;
-    --color-pencil-500: #DDAA3F;
+    /* Accent: Reference Warm Brown */
+    --color-pencil-300: #E9D5CA;
+    --color-pencil-400: #D19C7D;
+    --color-pencil-500: #B5734F;
 
-    /* Additional UI tokens */
+    /* Additional UI Tokens */
     --color-surface: #FFFFFF;
-    --color-muted: #F1F3F1;
-    --color-line: #E5E9E6;
+    --color-muted: #F5F6F7;
+    --color-line: #E4E1E2;
 }

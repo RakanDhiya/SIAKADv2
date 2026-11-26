@@ -33,19 +33,59 @@ class SemesterController extends CrudController
     protected function fields(): array
     {
         return [
-            ['name' => 'academic_year_id', 'label' => 'Tahun ajaran', 'type' => 'select', 'required' => true,
-                'options' => fn () => AcademicYear::options(), 'rules' => 'required|exists:academic_years,id'],
-            ['name' => 'name', 'label' => 'Semester', 'type' => 'select', 'required' => true, 'options' => Semester::NAMES,
-                'rules' => fn ($m) => ['required', Rule::in(array_keys(Semester::NAMES)),
-                    Rule::unique('semesters', 'name')->where('academic_year_id', request('academic_year_id'))->ignore($m?->id)]],
-            ['name' => 'is_active', 'label' => 'Jadikan semester aktif', 'type' => 'checkbox', 'rules' => 'nullable|boolean'],
+            [
+                'name' => 'academic_year_id',
+                'label' => 'Tahun ajaran',
+                'type' => 'select',
+                'required' => true,
+                'options' => fn () => AcademicYear::options(),
+                'rules' => fn ($m) => [
+                    'required',
+                    request()->boolean('is_active')
+                        ? Rule::exists('academic_years', 'id')->where('is_active', true)
+                        : Rule::exists('academic_years', 'id'),
+                ],
+            ],
+            [
+                'name' => 'name',
+                'label' => 'Semester',
+                'type' => 'select',
+                'required' => true,
+                'options' => Semester::NAMES,
+                'rules' => fn ($m) => [
+                    'required',
+                    Rule::in(array_keys(Semester::NAMES)),
+                    Rule::unique('semesters', 'name')
+                        ->where('academic_year_id', request('academic_year_id'))
+                        ->ignore($m?->id),
+                ],
+            ],
+            [
+                'name' => 'is_active',
+                'label' => 'Jadikan semester aktif',
+                'type' => 'checkbox',
+                'rules' => 'nullable|boolean',
+            ],
         ];
     }
 
     protected function afterSave(Model $model, Request $request): void
     {
-        if ($model->is_active) {
-            Semester::where('id', '!=', $model->id)->update(['is_active' => false]);
+        if (!$model->is_active) {
+            return;
         }
+
+        $academicYearIsActive = AcademicYear::whereKey($model->academic_year_id)
+            ->where('is_active', true)
+            ->exists();
+
+        if (!$academicYearIsActive) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'academic_year_id' => 'Semester hanya dapat diaktifkan pada tahun ajaran yang aktif.',
+            ]);
+        }
+
+        Semester::where('id', '!=', $model->id)
+            ->update(['is_active' => false]);
     }
 }

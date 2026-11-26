@@ -2,27 +2,41 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AcademicYear;
 use App\Models\ClassEnrollment;
 use App\Models\Classroom;
 use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
-/**
- * Kenaikan kelas: penempatan lama diberi status (naik/tinggal/lulus),
- * lalu dibuat penempatan baru di tahun ajaran tujuan. Riwayat kelas tetap tersimpan.
- */
 class PromotionController extends Controller
 {
     public function index(Request $request)
     {
-        $options = Classroom::options();
+        $options = Classroom::with('academicYear')
+            ->orderByDesc('academic_year_id')
+            ->orderBy('grade_level')
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn ($classroom) => [
+                $classroom->id => $classroom->name.' ('.$classroom->academicYear->name.')',
+            ])
+            ->all();
+
         $enrollments = collect();
 
-        if ($from = $request->query('from_classroom_id')) {
-            $enrollments = ClassEnrollment::with('student')
-                ->where('classroom_id', $from)->where('status', 'aktif')
-                ->get()->sortBy('student.name');
+        if ($fromId = $request->query('from_classroom_id')) {
+            $from = Classroom::find($fromId);
+
+            if ($from) {
+                $enrollments = ClassEnrollment::with('student')
+                    ->where('classroom_id', $from->id)
+                    ->where('status', 'aktif')
+                    ->whereHas('student', fn ($query) => $query->where('status', 'aktif'))
+                    ->get()
+                    ->sortBy('student.name');
+            }
         }
 
         return view('modules.promotion.index', compact('options', 'enrollments'));
@@ -31,67 +45,193 @@ class PromotionController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'from_classroom_id' => ['required', 'exists:classrooms,id'],
-            'to_classroom_id'   => ['required', 'exists:classrooms,id', 'different:from_classroom_id'],
-            'stay_classroom_id' => ['nullable', 'exists:classrooms,id'],
-            'result'            => ['required', 'array'],
-            'result.*'          => ['nullable', 'in:naik,tinggal,lulus'],
+            'from_classroom_id' => ['required', 'integer', 'exists:classrooms,id'],
+            'to_classroom_id' => ['nullable', 'integer', 'exists:classrooms,id'],
+            'stay_classroom_id' => ['nullable', 'integer', 'exists:classrooms,id'],
+            'result' => ['required', 'array', 'min:1'],
+            'result.*' => ['nullable', 'in:naik,tinggal,lulus'],
         ]);
 
-        $from = Classroom::findOrFail($data['from_classroom_id']);
-        $to = Classroom::findOrFail($data['to_classroom_id']);
-        $stay = isset($data['stay_classroom_id']) ? Classroom::find($data['stay_classroom_id']) : null;
-
         $done = 0;
-        $skipped = 0;
 
-        DB::transaction(function () use ($data, $from, $to, $stay, &$done, &$skipped) {
-            foreach ($data['result'] as $enrollmentId => $result) {
-                if (! $result) {
-                    continue;
+        DB::transaction(function () use ($data, &$done) {
+            $from = Classroom::whereKey($data['from_classroom_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! in_array((int) $from->grade_level, [10, 11, 12], true)) {
+                throw ValidationException::withMessages([
+                    'from_classroom_id' => 'Tingkat kelas asal tidak valid.',
+                ]);
+            }
+
+            $activeYear = AcademicYear::where('is_active', true)->first();
+
+            if (! $activeYear) {
+                throw ValidationException::withMessages([
+                    'from_classroom_id' => 'Belum ada tahun ajaran aktif untuk tujuan kenaikan kelas.',
+                ]);
+            }
+
+            if ((int) $from->academic_year_id === (int) $activeYear->id) {
+                throw ValidationException::withMessages([
+                    'from_classroom_id' => 'Kelas asal harus berasal dari tahun ajaran sebelumnya, bukan tahun ajaran aktif.',
+                ]);
+            }
+
+            $results = collect($data['result'])
+                ->filter(fn ($result) => filled($result));
+
+            if ($results->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'result' => 'Pilih minimal satu hasil untuk diproses.',
+                ]);
+            }
+
+            $enrollments = ClassEnrollment::with('student')
+                ->whereIn('id', $results->keys())
+                ->where('classroom_id', $from->id)
+                ->where('academic_year_id', $from->academic_year_id)
+                ->where('status', 'aktif')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            if ($enrollments->count() !== $results->count()) {
+                throw ValidationException::withMessages([
+                    'result' => 'Sebagian data siswa tidak valid atau sudah berubah.',
+                ]);
+            }
+
+            $needsPromotion = $results->contains('naik');
+            $needsRetention = $results->contains('tinggal');
+
+            $to = null;
+            $stay = null;
+
+            if ($needsPromotion) {
+                if ((int) $from->grade_level >= 12) {
+                    throw ValidationException::withMessages([
+                        'result' => 'Siswa tingkat 12 tidak dapat dinaikkan ke tingkat berikutnya.',
+                    ]);
                 }
 
-                $enrollment = ClassEnrollment::where('id', $enrollmentId)
-                    ->where('classroom_id', $from->id)->where('status', 'aktif')->first();
-                if (! $enrollment) {
-                    continue;
+                $to = Classroom::find($data['to_classroom_id'] ?? null);
+
+                $this->validateTargetClass(
+                    $from,
+                    $to,
+                    $activeYear,
+                    (int) $from->grade_level + 1,
+                    'Kelas tujuan naik kelas'
+                );
+            }
+
+            if ($needsRetention) {
+                $stay = Classroom::find($data['stay_classroom_id'] ?? null);
+
+                $this->validateTargetClass(
+                    $from,
+                    $stay,
+                    $activeYear,
+                    (int) $from->grade_level,
+                    'Kelas tujuan tinggal kelas'
+                );
+            }
+
+            foreach ($results as $enrollmentId => $result) {
+                $enrollment = $enrollments->get($enrollmentId);
+                $student = $enrollment->student;
+
+                if (! $student || $student->status !== 'aktif') {
+                    throw ValidationException::withMessages([
+                        'result' => 'Hanya siswa berstatus aktif yang dapat diproses.',
+                    ]);
                 }
 
                 if ($result === 'lulus') {
+                    if ((int) $from->grade_level !== 12) {
+                        throw ValidationException::withMessages([
+                            'result' => 'Hanya siswa tingkat 12 yang dapat dinyatakan lulus.',
+                        ]);
+                    }
+
                     $enrollment->update(['status' => 'lulus']);
-                    Student::where('id', $enrollment->student_id)->update(['status' => 'lulus']);
+                    $student->update(['status' => 'lulus']);
+
                     $done++;
                     continue;
                 }
 
                 $target = $result === 'naik' ? $to : $stay;
 
-                $invalid = ! $target
-                    || $target->academic_year_id === $from->academic_year_id
-                    || ClassEnrollment::where('student_id', $enrollment->student_id)
-                        ->where('academic_year_id', $target->academic_year_id)->exists();
+                $alreadyEnrolled = ClassEnrollment::where('student_id', $student->id)
+                    ->where('academic_year_id', $activeYear->id)
+                    ->exists();
 
-                if ($invalid) {
-                    $skipped++;
-                    continue;
+                if ($alreadyEnrolled) {
+                    throw ValidationException::withMessages([
+                        'result' => "Siswa {$student->name} sudah memiliki penempatan pada tahun ajaran tujuan.",
+                    ]);
                 }
 
-                $enrollment->update(['status' => $result]);
-                ClassEnrollment::create([
-                    'student_id'       => $enrollment->student_id,
-                    'classroom_id'     => $target->id,
-                    'academic_year_id' => $target->academic_year_id,
-                    'status'           => 'aktif',
+                $enrollment->update([
+                    'status' => $result,
                 ]);
+
+                ClassEnrollment::create([
+                    'student_id' => $student->id,
+                    'classroom_id' => $target->id,
+                    'academic_year_id' => $target->academic_year_id,
+                    'status' => 'aktif',
+                ]);
+
                 $done++;
             }
         });
 
-        $message = "{$done} siswa diproses.";
-        if ($skipped) {
-            $message .= " {$skipped} dilewati (kelas tujuan belum dipilih, tahun ajaran sama, atau sudah punya penempatan di tahun tujuan).";
+        return redirect()
+            ->route('promotion.index', [
+                'from_classroom_id' => $data['from_classroom_id'],
+            ])
+            ->with('success', "{$done} siswa berhasil diproses.");
+    }
+
+    private function validateTargetClass(
+        Classroom $from,
+        ?Classroom $target,
+        AcademicYear $activeYear,
+        int $expectedGrade,
+        string $label
+    ): void {
+        if (! $target) {
+            throw ValidationException::withMessages([
+                'to_classroom_id' => "{$label} wajib dipilih.",
+            ]);
         }
 
-        return redirect()->route('promotion.index', ['from_classroom_id' => $from->id])->with('success', $message);
+        if ((int) $target->grade_level !== $expectedGrade) {
+            throw ValidationException::withMessages([
+                'to_classroom_id' => "{$label} harus tingkat {$expectedGrade}.",
+            ]);
+        }
+
+        if ((int) $target->academic_year_id === (int) $from->academic_year_id) {
+            throw ValidationException::withMessages([
+                'to_classroom_id' => 'Tahun ajaran tujuan harus berbeda dari tahun ajaran asal.',
+            ]);
+        }
+
+        if ((int) $target->academic_year_id !== (int) $activeYear->id) {
+            throw ValidationException::withMessages([
+                'to_classroom_id' => 'Kelas tujuan harus berada di tahun ajaran aktif.',
+            ]);
+        }
+
+        if ($target->major_id != $from->major_id) {
+            throw ValidationException::withMessages([
+                'to_classroom_id' => 'Jurusan kelas tujuan harus sama dengan kelas asal.',
+            ]);
+        }
     }
 }

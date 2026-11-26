@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
+use App\Models\Semester;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -39,9 +40,22 @@ class AcademicYearController extends CrudController
 
     protected function afterSave(Model $model, Request $request): void
     {
-        // Hanya satu tahun ajaran yang aktif.
         if ($model->is_active) {
-            AcademicYear::where('id', '!=', $model->id)->update(['is_active' => false]);
+            AcademicYear::query()
+                ->where('id', '!=', $model->id)
+                ->lockForUpdate()
+                ->get();
+
+            AcademicYear::where('id', '!=', $model->id)
+                ->update(['is_active' => false]);
+
+            Semester::where('academic_year_id', '!=', $model->id)
+                ->update(['is_active' => false]);
+
+            return;
         }
+
+        Semester::where('academic_year_id', $model->id)
+            ->update(['is_active' => false]);
     }
 }

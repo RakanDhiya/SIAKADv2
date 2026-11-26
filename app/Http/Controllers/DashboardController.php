@@ -16,6 +16,7 @@ use App\Models\Subject;
 use App\Models\Submission;
 use App\Models\Teacher;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class DashboardController extends Controller
 {
@@ -87,6 +88,57 @@ class DashboardController extends Controller
                 ->selectRaw('status, count(*) as total')
                 ->groupBy('status')
                 ->pluck('total', 'status');
+
+            // Rekap absensi selama satu minggu berjalan.
+            $weekStart = Carbon::today()->startOfWeek(Carbon::MONDAY);
+            $weekEnd = $weekStart->copy()->addDays(6);
+
+            $weeklyRecords = Attendance::query()
+                ->whereBetween('date', [
+                    $weekStart->toDateString(),
+                    $weekEnd->toDateString(),
+                ])
+                ->selectRaw('DATE(date) as attendance_date, status, COUNT(*) as total')
+                ->groupByRaw('DATE(date), status')
+                ->get()
+                ->groupBy('attendance_date');
+
+            $dayNames = [
+                1 => 'Sen',
+                2 => 'Sel',
+                3 => 'Rab',
+                4 => 'Kam',
+                5 => 'Jum',
+                6 => 'Sab',
+                7 => 'Min',
+            ];
+
+            $data['weeklyAttendance'] = collect(range(0, 6))
+                ->map(function ($offset) use ($weekStart, $weeklyRecords, $dayNames) {
+                    $date = $weekStart->copy()->addDays($offset);
+                    $dateKey = $date->toDateString();
+
+                    $records = $weeklyRecords
+                        ->get($dateKey, collect())
+                        ->keyBy('status');
+
+                    $statuses = [];
+
+                    foreach (array_keys(Attendance::STATUSES) as $status) {
+                        $statuses[$status] = (int) (
+                            $records->get($status)->total ?? 0
+                        );
+                    }
+
+                    return [
+                        'date' => $dateKey,
+                        'day' => $dayNames[$date->dayOfWeekIso],
+                        'label' => $date->format('d/m'),
+                        'statuses' => $statuses,
+                        'total' => array_sum($statuses),
+                    ];
+                })
+                ->values();
 
             // Mengambil seluruh jadwal pelajaran pada hari ini.
             if ($semester) {
